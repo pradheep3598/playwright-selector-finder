@@ -67,7 +67,7 @@ class MCPServer extends EventEmitter {
     });
   }
 
-  async send(message: any, options?: { timeout?: number }): Promise<void> {
+  async send(message: any, options?: { timeout?: number }): Promise<any> {
     await this.sendNoReply(message);
     return this._waitForResponse(options || {});
   }

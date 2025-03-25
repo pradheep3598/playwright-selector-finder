@@ -7,13 +7,14 @@
     "strict": true,
     "module": "CommonJS",
     "outDir": "./lib",
-    "types": ["node", "playwright"],
+    "types": ["node", "playwright", "@playwright/test"],
     "resolveJsonModule": true,
     "allowJs": true,
     "declaration": true
   },
   "include": [
     "src",
-    "package.json"
+    "package.json",
+    "playwright.config.ts"
   ]
 }
