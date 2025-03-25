@@ -1,5 +1,4 @@
-import { MCPClient } from '@modelcontextprotocol/sdk/client';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio';
+import { chromium, Browser, Page } from 'playwright';
 
 export interface SelectorFinderOptions {
   headless?: boolean;
@@ -17,7 +16,8 @@ export interface SelectorResult {
 }
 
 export class SelectorFinder {
-  private mcpClient: MCPClient;
+  private browser: Browser | null = null;
+  private page: Page | null = null;
   private options: SelectorFinderOptions;
 
   constructor(options: SelectorFinderOptions = {}) {
@@ -29,26 +29,38 @@ export class SelectorFinder {
       debug: false,
       ...options
     };
-
-    this.mcpClient = new MCPClient({
-      transport: new StdioClientTransport({
-        command: 'npx',
-        args: [
-          '@playwright/mcp',
-          ...(this.options.headless ? ['--headless'] : [])
-        ]
-      })
-    });
   }
 
   async init(): Promise<void> {
-    await this.mcpClient.connect();
+    this.browser = await chromium.launch({ headless: this.options.headless });
+    this.page = await this.browser.newPage();
   }
 
   async findSelector(prompt: string): Promise<SelectorResult> {
+    if (!this.page) {
+      throw new Error('SelectorFinder not initialized. Call init() first.');
+    }
+
     try {
-      const response = await this.mcpClient.callTool('get_selector', { prompt });
-      return JSON.parse(response.content[0].text);
+      // Get accessibility snapshot
+      const snapshot = await this.page.accessibility.snapshot();
+      if (!snapshot) {
+        throw new Error('No accessibility snapshot available');
+      }
+
+      // Find matching element
+      const element = this.findMatchingElement(snapshot, prompt.toLowerCase());
+      if (!element) {
+        throw new Error(`No element found matching "${prompt}"`);
+      }
+
+      // Return selector information
+      return {
+        selector: `[aria-label="${element.name}"]`,
+        description: element.name || '',
+        role: element.role || '',
+        confidence: 1.0
+      };
     } catch (error) {
       if (this.options.debug) {
         console.error('Error finding selector:', error);
@@ -57,8 +69,30 @@ export class SelectorFinder {
     }
   }
 
+  private findMatchingElement(node: any, prompt: string): any {
+    // Check current node
+    if (node.name?.toLowerCase().includes(prompt) || 
+        node.role?.toLowerCase().includes(prompt)) {
+      return node;
+    }
+
+    // Check children
+    if (node.children) {
+      for (const child of node.children) {
+        const match = this.findMatchingElement(child, prompt);
+        if (match) return match;
+      }
+    }
+
+    return null;
+  }
+
   async close(): Promise<void> {
-    await this.mcpClient.close();
+    if (this.browser) {
+      await this.browser.close();
+      this.browser = null;
+      this.page = null;
+    }
   }
 }
 
